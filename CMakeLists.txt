@@ -12,6 +12,6 @@ include_directories(include  ${PCL_INCLUDE_DIRS} ${Eigen3_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS} ${Eigen3_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS} ${Eigen3_DEFINITIONS})
 
-add_executable(arvc_ground_segmentation_and_filtering src/ground_segmentation_and_filtering.cpp)
-target_link_libraries(arvc_ground_segmentation_and_filtering ${PCL_LIBRARIES})
+add_executable(rrss_grnd_filter src/rrss_grnd_filter.cpp)
+target_link_libraries(rrss_grnd_filter ${PCL_LIBRARIES})
 
