@@ -8,6 +8,8 @@ Its implementation has been carried out using the PCL (Point Cloud Library) libr
 
 * [PCL: Point Cloud Library](http://pointclouds.org/)
 
+For more information see the article: [Comparative analysis of segmentation techniques for reticular structures](http://)
+
 Example Datasets
 ----------------
 * [Labelled paralellepipeds](http://)
