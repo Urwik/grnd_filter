@@ -4,7 +4,7 @@ Este repositorio recoge un conjunto de algoritmos para filtrar los puntos de sue
 
 Su implementación se ha llevado a cabo haciendo uso de la librería PCL (Point Cloud Library) en lenguaje C++.
 
-* [PCL](http://pointclouds.org/)
+* [PCL: Point Cloud Library](http://pointclouds.org/)
 
 
     
