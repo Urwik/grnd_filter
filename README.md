@@ -1,13 +1,37 @@
 # Reticular Structures Ground Filter (rrss_grnd_filter)
 
-Este repositorio recoge un conjunto de algoritmos para filtrar los puntos de suelo de la lectura de un sensor LiDAR en entornos con estructuras reticulares que se elevan desde el suelo.
+Description
+-----------
+This repository contains a set of algorithms for filtering ground points from a 3D LiDAR scans in environments with reticular structures rising from the ground.
 
-Su implementación se ha llevado a cabo haciendo uso de la librería PCL (Point Cloud Library) en lenguaje C++.
+Its implementation has been carried out using the PCL (Point Cloud Library) library in C++ language.
 
 * [PCL: Point Cloud Library](http://pointclouds.org/)
 
+Example Datasets
+----------------
+* [Labelled paralellepipeds](http://)
 
-    
+<img src="images/Train_Env.jpg" alt="Train environment example" width="50%">
 
-Code to filter ground in clouds with reticular structures that grow from the floor.
-Work pressented in JJAA23 and ICINCO.
+* [Reticular structure]()
+  
+<img src="images/Test_env_example.png" alt="Train environment example" width="50%">
+
+Citation
+--------
+If you use this code in your research, please cite the following paper:
+```
+@conference{FJSolerRRSSGF,
+  author    = { Francisco Jose Soler and
+                Adrián Peidró and
+                David Valiente and
+                Luis Payá and
+                Oscar Reinoso},
+  title     = {{Comparative analysis of segmentation techniques for reticular structures.}},
+  month     = {Nov 13-15},
+  year      = {2023},
+  address   = {Rome, Italy},
+  publisher = {}
+}
+```
