@@ -18,7 +18,7 @@ Example Datasets
 
 * [Reticular structure](http://)
   
-<img src="images/Test_env_example.png" alt="Train environment example" width="50%">
+<img src="images/TEST_ENVIROMENT.jpg" alt="Test environment example" width="50%">
 
 Citation
 --------
