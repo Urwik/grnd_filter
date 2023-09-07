@@ -12,11 +12,11 @@ For more information see the article: [Comparative analysis of segmentation tech
 
 Example Datasets
 ----------------
-* [Labelled paralellepipeds](https://arvc.umh.es/software/db/lidar_truss_db/arvc_truss_train.zip)
+* [Labelled paralellepipeds](https://arvc.umh.es/software/db/hyrecro/arvc_truss_train.zip)
 
 <img src="images/Train_Env.jpg" alt="Train environment example" width="50%">
 
-* [Reticular structure](https://arvc.umh.es/software/db/lidar_truss_db/arvc_truss_test.zip)
+* [Reticular structure](https://arvc.umh.es/software/db/hyrecro/arvc_truss_test.zip)
   
 <img src="images/TEST_ENVIROMENT.jpg" alt="Test environment example" width="50%">
 
