@@ -198,6 +198,7 @@ namespace arvc
   }
 
 
+
   /**
    * @brief Lee una nube de puntos en formato .pcd o .ply
    * 
@@ -255,6 +256,8 @@ namespace arvc
 
     return _cloud_xyz;
   }
+
+
 
   /**
    * @brief Realiza agrupaciones de puntos en función de sus normales

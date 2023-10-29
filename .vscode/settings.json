@@ -1,0 +1,18 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/fran/workSpaces/arvc_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/fran/workSpaces/arvc_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages"
+    ],
+    "ros.distro": "noetic",
+    "files.associations": {
+        "*.sdf": "xsl",
+        "*.world": "xsl",
+        "iostream": "cpp",
+        "chrono": "cpp",
+        "ostream": "cpp"
+    }
+}
