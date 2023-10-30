@@ -23,6 +23,7 @@ namespace fs = std::filesystem;
 using namespace std;
 
 arvc::console cons;
+arvc::viewer view("GLOBAL VIEWER");
 
 
 class remove_ground
@@ -65,6 +66,8 @@ public:
   float ratio_threshold;
 
   string mode;
+
+
 
   remove_ground(fs::path _path)
   {
@@ -140,6 +143,7 @@ public:
   }
 
 
+
   void get_ground_truth_indices(PointCloudLN::Ptr& _cloud){
     gt_indices ground_truth_indices;
     ground_truth_indices.ground.reset(new pcl::Indices); 
@@ -148,6 +152,7 @@ public:
     *this->gt_ground_idx = *ground_truth_indices.ground;
     *this->gt_truss_idx = *ground_truth_indices.truss;
   }
+
 
 
   void coarse_segmentation(){
@@ -163,17 +168,16 @@ public:
   }
 
 
-  void view_indices(pcl::IndicesPtr& _indices){
-    PointCloud::Ptr cloud (new PointCloud);
-    cloud = arvc::extract_indices(this->cloud_in, _indices, false);
-    arvc::visualizeCloud(cloud);
-  }
-
 
   void fine_segmentation(){
     cons.debug("Fine segmentation");
 
-    std::pair<vector<pcl::PointIndices>, int> regrow_output = arvc::regrow_segmentation(this->cloud_in, this->coarse_ground_idx);
+    std::pair<vector<pcl::PointIndices>, int> regrow_output;
+    
+    if(this->coarse_ground_idx->size() > 0)
+      regrow_output = arvc::regrow_segmentation(this->cloud_in, this->coarse_ground_idx, false);
+    else
+      regrow_output = arvc::regrow_segmentation(this->cloud_in, false);  
 
     this->regrow_clusters = regrow_output.first;
     this->normals_time = regrow_output.second;
@@ -185,6 +189,7 @@ public:
       this->coarse_truss_idx->insert(this->coarse_truss_idx->end(), this->regrow_clusters[clus_indx].indices.begin(), this->regrow_clusters[clus_indx].indices.end());
 
   }
+
 
 
   void validate_clusters(){
@@ -214,6 +219,7 @@ public:
       break;
     }
   }
+
 
 
   void density_filter(){
@@ -250,6 +256,16 @@ public:
       pcl::visualization::PCLVisualizer my_vis;
       my_vis.setBackgroundColor(1,1,1);
 
+      try
+      {
+        my_vis.loadCameraParameters("camera_params.txt");
+      }
+      catch(const std::exception& e)
+      {
+        
+      }
+      
+
       pcl::visualization::PointCloudColorHandlerCustom<PointT> truss_color (truss_cloud, 0,255,0);
       pcl::visualization::PointCloudColorHandlerCustom<PointT> ground_color (ground_cloud, 100,100,100);
       pcl::visualization::PointCloudColorHandlerCustom<PointT> error_color (error_cloud, 255,0,0);
@@ -264,8 +280,10 @@ public:
       
 
       while (!my_vis.wasStopped())
+      {
+        my_vis.saveCameraParameters("camera_params.txt");
         my_vis.spinOnce(100);
-
+      }
   }
 
 
@@ -329,7 +347,7 @@ public:
     max_values.y() = std::abs(maxPoint.y - minPoint.y);
     max_values.z() = std::abs(maxPoint.z - minPoint.z);
 
-    if (max_length < this->module_threshold)
+    if (max_values.maxCoeff() < this->module_threshold)
       return true;
     else
       return false;
@@ -343,7 +361,7 @@ public:
     vector<int> valid_clusters;
     valid_clusters.clear();
     pcl::IndicesPtr current_cluster (new pcl::Indices);
-
+    
     int clust_indx = 0;
     for(auto cluster : this->regrow_clusters)
     {
@@ -377,17 +395,6 @@ public:
 
       if (this->valid_module(current_cluster))
         valid_clusters.push_back(clust_indx);
-
-/*    // FOR VISUALIZATION
-      remain_input_cloud = arvc::extract_indices(_cloud_in, current_cluster, true); //FOR VISUALIZTION
-      pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
-      viewer->removeAllPointClouds();
-      viewer->addPointCloud<PointT> (remain_input_cloud, "original_cloud");
-      pcl::visualization::PointCloudColorHandlerCustom<PointT> single_color(current_cluster_cloud, 0, 255, 0);
-      viewer->addPointCloud<PointT> (current_cluster_cloud, single_color, "current_cluster_cloud");
-
-      while (!viewer->wasStopped ())
-        viewer->spinOnce(100); */
         
       clust_indx++;
     }
@@ -425,7 +432,7 @@ public:
   int compute()
   {
     this->read_cloud();
-    this->coarse_segmentation();
+    // this->coarse_segmentation();
     this->fine_segmentation();
     this->update_segmentation();
     this->density_filter();
@@ -442,8 +449,6 @@ public:
 
 
 
-
-
 int main(int argc, char **argv)
 {
   std::cout << YELLOW << "Running your code..." << RESET << std::endl;
@@ -452,8 +457,10 @@ int main(int argc, char **argv)
   cons.enable_debug = false;
 
   // CONFIGURATION PARAMS
-  bool en_visual = false;
-  bool en_metric = true;
+  bool en_visual = true;
+  bool en_metric = false;
+  float ratio_threshold = 0.2f;   // original: 0.4f | wo coarse: 0.2f 
+  float module_threshold = 1.0f;  // original: 0.5f | wo coarse: 1.0f
   int normals_time = 0, metrics_time = 0;
   
 
@@ -461,7 +468,10 @@ int main(int argc, char **argv)
   arvc::metrics metricas;
   std::vector<fs::path> path_vector;
   
+  int count = 5;
 
+  vector<float> by_module_f1;
+  vector<float> by_hybrid_f1;
 
   // COMPUTE THE ALGORITHM FOR EVERY CLOUD IN THE CURRENT FOLDER
 
@@ -479,8 +489,20 @@ int main(int argc, char **argv)
       remove_ground rg(entry);
       rg.visualize = en_visual;
       rg.enable_metrics = en_metric;
+      rg.ratio_threshold = ratio_threshold;
+      rg.module_threshold = module_threshold;
+
       rg.mode = "module";
       rg.compute();
+
+      // GET IMPORTANT CLOUDS
+/*       {
+        by_module_f1.push_back(rg.metricas.f1_score);
+
+        rg.mode = "hybrid";
+        rg.compute();
+        by_hybrid_f1.push_back(rg.metricas.f1_score);
+      } */
 
       normals_time += rg.normals_time;
       metrics_time += rg.metrics_time;
@@ -499,7 +521,7 @@ int main(int argc, char **argv)
     } 
   }
 
-
+  
 
   // COMPUTE THE ALGORITHM ONLY ONE CLOUD PASSED AS ARGUMENT IN CURRENT FOLDER
 
@@ -511,6 +533,8 @@ int main(int argc, char **argv)
   
     rg.visualize = en_visual;
     rg.enable_metrics = en_metric;
+    rg.ratio_threshold = ratio_threshold;
+    rg.module_threshold = module_threshold;
     rg.mode = argv[2];
 
     rg.compute();
@@ -531,13 +555,22 @@ int main(int argc, char **argv)
   }
 
 
+// REMOVE
+
+/*   float distance;
+  for (size_t i = 0; i < by_module_f1.size(); i++)
+  {
+    distance = std::abs(by_module_f1[i] - by_hybrid_f1[i]);
+    
+    if (distance > 0.01)
+      cout << "CLOUD WITH DIFFERENCE: " << path_vector[i].filename() << endl;
+  } */
+
 
   // PLOT METRICS
   
   if(en_metric) metricas.show(); 
     
-
-
   
   // PRINT COMPUTATION TIME
 

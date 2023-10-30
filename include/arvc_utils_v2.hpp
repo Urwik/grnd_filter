@@ -405,6 +405,8 @@ typename pcl::PointCloud<PointT>::Ptr readPointCloud(const std::string& path)
   std::pair<vector<pcl::PointIndices>, int>
   regrow_segmentation (PointCloud::Ptr &_cloud_in, pcl::IndicesPtr &_indices, bool _visualize=false)
   {
+    cout << "Regrow segmentation a set of indices fomr a cloud" << endl;
+
     auto start = std::chrono::high_resolution_clock::now();
     // Estimación de normales
     pcl::PointCloud<pcl::Normal>::Ptr _cloud_normals (new pcl::PointCloud<pcl::Normal>);
@@ -423,23 +425,21 @@ typename pcl::PointCloud<PointT>::Ptr readPointCloud(const std::string& path)
     // Segmentación basada en crecimiento de regiones
     vector<pcl::PointIndices> _regrow_clusters;
     pcl::RegionGrowing<PointT, pcl::Normal> reg;
-    reg.setMinClusterSize (50);
+    reg.setMinClusterSize (50); //50 original
     reg.setMaxClusterSize (25000);
     reg.setSearchMethod (tree);
     reg.setSmoothModeFlag(false);
     reg.setCurvatureTestFlag(true);
     reg.setResidualThreshold(false);
     reg.setCurvatureThreshold(1);
-    reg.setNumberOfNeighbours (10);
+    reg.setNumberOfNeighbours (10); //10 original
     reg.setInputCloud (_cloud_in);
     reg.setIndices(_indices);
     reg.setInputNormals (_cloud_normals);
-    reg.setSmoothnessThreshold (10.0 / 180.0 * M_PI);
+    reg.setSmoothnessThreshold ( pcl::deg2rad(10.0)); //10 original
     reg.extract (_regrow_clusters);
 
-    // cout << "Number of clusters: " << _regrow_clusters.size() << endl;
-
-    // Uncomment to visualize cloud
+    // RESULTS VISUALIZATION 
     if(_visualize)
     {
       pcl::visualization::PCLVisualizer vis ("Regrow Visualizer");
@@ -447,21 +447,44 @@ typename pcl::PointCloud<PointT>::Ptr readPointCloud(const std::string& path)
       int v1(0);
       int v2(0);
 
+      vis.setBackgroundColor(1,1,1);
+      try
+      {
+        vis.loadCameraParameters("camera_params_regrow_clusters.txt");
+        /* code */
+      }
+      catch(const std::exception& e)
+      {
+      }
+      
+
       //Define ViewPorts
       vis.createViewPort(0,0,0.5,1, v1);
-      vis.createViewPort(0.5,0,1,1, v2);
-
-      pcl::visualization::PointCloudColorHandlerCustom<PointT> green_color(_cloud_in, 0, 255, 0);
+      pcl::visualization::PointCloudColorHandlerCustom<PointT> green_color(_cloud_in, 10, 150, 10);
       vis.addPointCloud<PointT>(_cloud_in, green_color, "cloud", v1);
-      vis.addPointCloudNormals<PointT, pcl::Normal>(_cloud_in, _cloud_normals, 1, 0.1, "normals", v1);
+      vis.addPointCloudNormals<PointT, pcl::Normal>(_cloud_in, _cloud_normals, 5, 0.1, "normals", v1);
 
 
+      vis.createViewPort(0.5,0,1,1, v2);
       pcl::PointCloud<pcl::PointXYZRGB>::Ptr color_cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
       color_cloud = reg.getColoredCloud();
+
+      pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+      extract.setInputCloud(color_cloud);
+      pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+      inliers->indices = *_indices;
+      extract.setIndices(inliers);
+      extract.setNegative(false);
+      extract.filter(*color_cloud);
+
       vis.addPointCloud<pcl::PointXYZRGB>(color_cloud, "Regrow Segments",v2);
 
+
       while (!vis.wasStopped())
+      {
+        vis.saveCameraParameters("camera_params_regrow_clusters.txt");
         vis.spinOnce();
+      }
     }
     return std::pair<vector<pcl::PointIndices>, int> {_regrow_clusters, duration.count()};
   }
@@ -476,6 +499,7 @@ typename pcl::PointCloud<PointT>::Ptr readPointCloud(const std::string& path)
   std::pair<vector<pcl::PointIndices>, int>
   regrow_segmentation (PointCloud::Ptr &_cloud_in, bool _visualize = false)
   {
+    cout << "Regrow segmentation complete cloud" << endl;
     auto start = std::chrono::high_resolution_clock::now();
     // Estimación de normales
     pcl::PointCloud<pcl::Normal>::Ptr _cloud_normals (new pcl::PointCloud<pcl::Normal>);
@@ -495,17 +519,17 @@ typename pcl::PointCloud<PointT>::Ptr readPointCloud(const std::string& path)
     // Segmentación basada en crecimiento de regiones
     vector<pcl::PointIndices> _regrow_clusters;
     pcl::RegionGrowing<PointT, pcl::Normal> reg;
-    reg.setMinClusterSize (50);
+    reg.setMinClusterSize (50); //50 original
     reg.setMaxClusterSize (25000);
     reg.setSearchMethod (tree);
     reg.setSmoothModeFlag(false);
     reg.setCurvatureTestFlag(true);
     reg.setResidualThreshold(false);
     reg.setCurvatureThreshold(1);
-    reg.setNumberOfNeighbours (10);
+    reg.setNumberOfNeighbours (10); //10 original
     reg.setInputCloud (_cloud_in);
     reg.setInputNormals (_cloud_normals);
-    reg.setSmoothnessThreshold (10.0 / 180.0 * M_PI);
+    reg.setSmoothnessThreshold (pcl::deg2rad(10.0)); //10 original
     reg.extract (_regrow_clusters);
 
     // cout << "Number of clusters: " << _regrow_clusters.size() << endl;
