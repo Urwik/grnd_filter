@@ -1,0 +1,14 @@
+Clouds with higher difference than 0.01 on f1 score between module and hybrid:
+    - 00455.ply: OK 
+    - 00386.ply: ~
+    - 00179.ply: X
+    - 00331.ply: ~
+    - 00190.ply: X
+    - 00800.ply: BAD GROUND DETECTION
+
+- First 5 clouds with f1_score higher than 0.9:
+    - 00847.ply
+    - 00450.ply
+    - 00765.ply
+    - 00924.ply
+    - 00272.ply
