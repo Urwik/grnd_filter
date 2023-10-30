@@ -325,6 +325,7 @@ typename pcl::PointCloud<PointT>::Ptr readPointCloud(const std::string& path)
   {
 
     float _max_length;
+
     // Compute principal directions
     Eigen::Vector4f pcaCentroid;
     pcl::compute3DCentroid(*cloud, pcaCentroid);
@@ -753,6 +754,34 @@ typename pcl::PointCloud<PointT>::Ptr readPointCloud(const std::string& path)
     return eigenValuesPCA;
   }
 
+  struct eig_decomp
+  {
+    Eigen::Vector3f values;
+    Eigen::Matrix3f vectors;
+  };
+
+  eig_decomp
+  compute_eigen_decomposition(PointCloud::Ptr &_cloud_in, pcl::IndicesPtr &_indices, bool normalize = true)
+  {
+    Eigen::Vector4f xyz_centroid;
+    PointCloud::Ptr tmp_cloud (new PointCloud);
+    tmp_cloud = arvc::extract_indices(_cloud_in, _indices);
+    pcl::compute3DCentroid(*tmp_cloud, xyz_centroid);
+
+    Eigen::Matrix3f covariance_matrix;
+    if (normalize)
+      pcl::computeCovarianceMatrixNormalized (*tmp_cloud, xyz_centroid, covariance_matrix); 
+    else
+      pcl::computeCovarianceMatrix (*tmp_cloud, xyz_centroid, covariance_matrix); 
+
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigen_solver(covariance_matrix, Eigen::ComputeEigenvectors);
+
+    eig_decomp eigen_decomp;
+    eigen_decomp.values = eigen_solver.eigenvalues();
+    eigen_decomp.vectors = eigen_solver.eigenvectors();
+
+    return eigen_decomp;
+  }
 
   /**
    * @brief Filters each cluster by its eigen values

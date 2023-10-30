@@ -61,6 +61,9 @@ public:
   bool visualize;
   bool enable_metrics;
 
+  float module_threshold;
+  float ratio_threshold;
+
   string mode;
 
   remove_ground(fs::path _path)
@@ -87,6 +90,8 @@ public:
     this->enable_metrics = false;
     this->normals_time = 0;
     this->metrics_time = 0;
+    this->ratio_threshold = 0.3f;
+    this->module_threshold = 1000.0f;
   }
 
 
@@ -194,15 +199,15 @@ public:
     switch (mode_dict[this->mode])
     {
     case 0:
-      this->valid_clusters = this->validate_clusters_by_ratio(this->cloud_in, this->regrow_clusters, 0.3f);
+      this->valid_clusters = this->validate_clusters_by_ratio();
       break;
     
     case 1:
-      this->valid_clusters = this->validate_clusters_by_module(this->cloud_in, this->regrow_clusters, 1000.0f);
+      this->valid_clusters = this->validate_clusters_by_module();
       break;
 
     case 2:
-      this->valid_clusters = this->validate_clusters_hybrid(this->cloud_in, this->regrow_clusters, 0.3f, 1000.0f);
+      this->valid_clusters = this->validate_clusters_hybrid();
       break;
 
     default:
@@ -219,11 +224,13 @@ public:
   }
 
 
+
   void update_segmentation(){
     // Update truss and ground indices for final segmentation
     *this->truss_idx = *this->coarse_truss_idx;
     *this->ground_idx = *arvc::inverseIndices(this->cloud_in, this->truss_idx);
   }
+
 
 
   void view_final_segmentation(){
@@ -255,14 +262,12 @@ public:
       auto pos = cloud_in->sensor_origin_;
       auto ori = cloud_in->sensor_orientation_;
       
-      // Eigen::Vector3f position(pos[0], pos[1], pos[2]);
-      // my_vis.addCube(position, ori, 0.3, 0.3, 0.3, "sensor_origin");
 
       while (!my_vis.wasStopped())
-      {
         my_vis.spinOnce(100);
-      }
+
   }
+
 
   
   void compute_metrics(){
@@ -277,23 +282,75 @@ public:
   }
 
 
+  bool
+  valid_ratio(pcl::IndicesPtr& _cluster_indices)
+  {
+      auto eig_decomp = arvc::compute_eigen_decomposition(this->cloud_in, _cluster_indices, true);
+      float size_ratio = eig_decomp.values(1)/eig_decomp.values(2);
+
+      if (size_ratio <= this->ratio_threshold){
+        return true;
+      }
+      else
+        return false;
+  }
+
+
+
+  bool
+  valid_module(pcl::IndicesPtr& _cluster_indices){
+
+    // GET THE CLOUD REPRESENTING THE CLUSTER
+    PointCloud::Ptr cluster_cloud (new PointCloud);
+    cluster_cloud = arvc::extract_indices(this->cloud_in, _cluster_indices);
+    
+    // COMPUTE CLOUD CENTROID
+    Eigen::Vector4f centroid;
+    pcl::compute3DCentroid(*cluster_cloud, centroid);
+
+    // COMPUTE EIGEN DECOMPOSITION
+    arvc::eig_decomp eigen_decomp = arvc::compute_eigen_decomposition(this->cloud_in, _cluster_indices, false);
+
+    // Compute transform between the original cloud and the eigen vectors of the cluster
+    Eigen::Matrix4f projectionTransform(Eigen::Matrix4f::Identity());
+    projectionTransform.block<3,3>(0,0) = eigen_decomp.vectors.transpose();
+    projectionTransform.block<3,1>(0,3) = -1.f * (projectionTransform.block<3,3>(0,0) * centroid.head<3>());
+    
+    // Transform the origin to the centroid of the cluster and to its eigen vectors
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloudPointsProjected (new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::transformPointCloud(*cluster_cloud, *cloudPointsProjected, projectionTransform);
+    
+    // Get the minimum and maximum points of the transformed cloud.
+    pcl::PointXYZ minPoint, maxPoint;
+    pcl::getMinMax3D(*cloudPointsProjected, minPoint, maxPoint);
+
+    Eigen::Vector3f max_values;
+    max_values.x() = std::abs(maxPoint.x - minPoint.x);
+    max_values.y() = std::abs(maxPoint.y - minPoint.y);
+    max_values.z() = std::abs(maxPoint.z - minPoint.z);
+
+    if (max_length < this->module_threshold)
+      return true;
+    else
+      return false;
+  }
+
+
+
   vector<int>
-  validate_clusters_by_ratio(PointCloud::Ptr &_cloud_in, vector<pcl::PointIndices> &clusters, float _ratio_threshold)
+  validate_clusters_by_ratio()
   {
     vector<int> valid_clusters;
     valid_clusters.clear();
+    pcl::IndicesPtr current_cluster (new pcl::Indices);
 
     int clust_indx = 0;
-    for(auto cluster : clusters)
+    for(auto cluster : this->regrow_clusters)
     {
-      pcl::IndicesPtr current_cluster (new pcl::Indices);
       *current_cluster = cluster.indices;
-      auto eig_values = arvc::compute_eigenvalues(_cloud_in, current_cluster, true);
-      float size_ratio = eig_values(1)/eig_values(2);
 
-      if (size_ratio <= _ratio_threshold){
+      if (this->valid_ratio(current_cluster))
         valid_clusters.push_back(clust_indx);
-      }
         
       clust_indx++;
     }
@@ -302,54 +359,46 @@ public:
   }
 
 
+
   vector<int>
-  validate_clusters_by_module(PointCloud::Ptr &_cloud_in, vector<pcl::PointIndices> &clusters, float _module_threshold)
+  validate_clusters_by_module()
   {
-    // cout << GREEN <<"Checking regrow clusters..." << RESET << endl;
     vector<int> valid_clusters;
     valid_clusters.clear();
+
     PointCloud::Ptr tmp_cloud (new PointCloud);
     PointCloud::Ptr current_cluster_cloud (new PointCloud);
     pcl::IndicesPtr current_cluster (new pcl::Indices);
 
     int clust_indx = 0;
-    for(auto cluster : clusters)
+    for(auto cluster : this->regrow_clusters)
     {
       *current_cluster = cluster.indices;
 
-      current_cluster_cloud = arvc::extract_indices(_cloud_in, current_cluster);
-      auto eig_values = arvc::compute_eigenvalues(_cloud_in, current_cluster, false);
-
-      // // FOR VISUALIZATION
-      // remain_input_cloud = arvc::extract_indices(_cloud_in, current_cluster, true); //FOR VISUALIZTION
-      // pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
-      // viewer->removeAllPointClouds();
-      // viewer->addPointCloud<PointT> (remain_input_cloud, "original_cloud");
-      // pcl::visualization::PointCloudColorHandlerCustom<PointT> single_color(current_cluster_cloud, 0, 255, 0);
-      // viewer->addPointCloud<PointT> (current_cluster_cloud, single_color, "current_cluster_cloud");
-
-      // while (!viewer->wasStopped ())
-      //   viewer->spinOnce(100);
-      
-      float max_length = arvc::get_max_length(current_cluster_cloud);
-
-      if (max_length < _module_threshold){
+      if (this->valid_module(current_cluster))
         valid_clusters.push_back(clust_indx);
-        // cout << "\tValid cluster: " << GREEN << clust_indx << RESET << " with  modules: " << eig_values(1) << ", " << eig_values(2) << endl;
-      }
+
+/*    // FOR VISUALIZATION
+      remain_input_cloud = arvc::extract_indices(_cloud_in, current_cluster, true); //FOR VISUALIZTION
+      pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+      viewer->removeAllPointClouds();
+      viewer->addPointCloud<PointT> (remain_input_cloud, "original_cloud");
+      pcl::visualization::PointCloudColorHandlerCustom<PointT> single_color(current_cluster_cloud, 0, 255, 0);
+      viewer->addPointCloud<PointT> (current_cluster_cloud, single_color, "current_cluster_cloud");
+
+      while (!viewer->wasStopped ())
+        viewer->spinOnce(100); */
         
       clust_indx++;
     }
-
-    // if (valid_clusters.size() == 0)
-    //   cout << "\tNo valid clusters found" << endl;
 
     return valid_clusters;
   }
 
 
+
   vector<int>
-  validate_clusters_hybrid(PointCloud::Ptr &_cloud_in, vector<pcl::PointIndices> &clusters, float _ratio_threshold, float _module_threshold)
+  validate_clusters_hybrid()
   {
     // cout << GREEN <<"Checking regrow clusters..." << RESET << endl;
     vector<int> valid_clusters;
@@ -359,51 +408,18 @@ public:
     pcl::IndicesPtr current_cluster (new pcl::Indices);
 
     int clust_indx = 0;
-    for(auto cluster : clusters)
+    for(auto cluster : this->regrow_clusters)
     {
       *current_cluster = cluster.indices;
 
-      current_cluster_cloud = arvc::extract_indices(_cloud_in, current_cluster);
-      auto eig_values = arvc::compute_eigenvalues(_cloud_in, current_cluster, false);
-
-      // // FOR VISUALIZATION
-      // remain_input_cloud = arvc::extract_indices(_cloud_in, current_cluster, true); //FOR VISUALIZTION
-      // pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
-      // viewer->removeAllPointClouds();
-      // viewer->addPointCloud<PointT> (remain_input_cloud, "original_cloud");
-      // pcl::visualization::PointCloudColorHandlerCustom<PointT> single_color(current_cluster_cloud, 0, 255, 0);
-      // viewer->addPointCloud<PointT> (current_cluster_cloud, single_color, "current_cluster_cloud");
-
-      // while (!viewer->wasStopped ())
-      //   viewer->spinOnce(100);
-      
-
-      float size_ratio = eig_values(1)/eig_values(2);
-      float max_length = arvc::get_max_length(current_cluster_cloud);
-      // cout << "Eig values: " << eig_values(1) << ", " << eig_values(2) << endl;
-      // cout << "Ratio: " << size_ratio << endl;
-
-      if (max_length < _module_threshold)
-      {
-        // cout << "\tValid cluster: " << GREEN << clust_indx << RESET << " With Module: " << max_length << endl;
-        if (size_ratio < _ratio_threshold){
-          valid_clusters.push_back(clust_indx);
-          // cout << "\tValid cluster: " << GREEN << _indx << RESET << " with ratio: " << size_ratio << endl;
-        }
-      // else
-        // cout << "\tInvalid cluster: " << RED << clust_indx << RESET << " With Module: " << max_length << endl;
-
-      // getchar();
-      }
+      if (this->valid_module(current_cluster) && this->valid_ratio(current_cluster))
+        valid_clusters.push_back(clust_indx);
       
       clust_indx++;
-
-    // if (valid_clusters.size() == 0)
-    //   cout << "\tNo valid clusters found" << endl;
-
     }
     return valid_clusters;
   }
+
 
 
   int compute()
