@@ -64,6 +64,7 @@ public:
 
   float module_threshold;
   float ratio_threshold;
+  float ransac_threshold;
 
   string mode;
 
@@ -95,6 +96,7 @@ public:
     this->metrics_time = 0;
     this->ratio_threshold = 0.3f;
     this->module_threshold = 1000.0f;
+    this->ransac_threshold = 0.5f;
   }
 
 
@@ -161,8 +163,8 @@ public:
     pcl::ModelCoefficientsPtr tmp_plane_coefss (new pcl::ModelCoefficients);
 
     tmp_cloud = arvc::voxel_filter(this->cloud_in, 0.05f);
-    tmp_plane_coefss = arvc::compute_planar_ransac(tmp_cloud, true, 0.5f, 1000);
-    auto coarse_indices = arvc::get_points_near_plane(this->cloud_in, tmp_plane_coefss, 0.5f);
+    tmp_plane_coefss = arvc::compute_planar_ransac(tmp_cloud, true, this->ransac_threshold, 1000);
+    auto coarse_indices = arvc::get_points_near_plane(this->cloud_in, tmp_plane_coefss, this->ransac_threshold);
     this->coarse_ground_idx = coarse_indices.first;
     this->coarse_truss_idx = coarse_indices.second;
   }
@@ -432,7 +434,7 @@ public:
   int compute()
   {
     this->read_cloud();
-    // this->coarse_segmentation();
+    this->coarse_segmentation();
     this->fine_segmentation();
     this->update_segmentation();
     this->density_filter();
@@ -459,8 +461,16 @@ int main(int argc, char **argv)
   // CONFIGURATION PARAMS
   bool en_visual = true;
   bool en_metric = false;
-  float ratio_threshold = 0.2f;   // original: 0.4f | wo coarse: 0.2f 
-  float module_threshold = 1.0f;  // original: 0.5f | wo coarse: 1.0f
+
+  float node_lngth = 2.0f;
+  float node_width = 0.2f;
+  float rsac_thrsh = 0.5f;
+
+  float ratio_threshold = node_width / rsac_thrsh;    // original
+  float module_threshold = rsac_thrsh;                // original
+  // float ratio_threshold = node_width / node_lngth;   // wo coarse 
+  // float module_threshold = node_lngth;               // wo coarse
+  
   int normals_time = 0, metrics_time = 0;
   
 
@@ -535,6 +545,7 @@ int main(int argc, char **argv)
     rg.enable_metrics = en_metric;
     rg.ratio_threshold = ratio_threshold;
     rg.module_threshold = module_threshold;
+    rg.ransac_threshold = rsac_thrsh;
     rg.mode = argv[2];
 
     rg.compute();
