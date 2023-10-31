@@ -264,6 +264,8 @@ public:
       try
       {
         my_vis.loadCameraParameters("camera_params.txt");
+        // my_vis.loadCameraParameters("/home/arvc/workSpaces/code_ws/build/" + this->cloud_id + "_camera_params.txt");
+
       }
       catch(const std::exception& e)
       {
@@ -437,6 +439,32 @@ public:
   int compute()
   {
     this->read_cloud();
+    
+/*     // PLOT GT CLOUD
+    // arvc::viewer myviewer("Viewer");
+    // myviewer.background_color = {1,1,1};
+    // try
+    // {
+    //   myviewer.view->loadCameraParameters("/home/arvc/workSpaces/code_ws/build/" + this->cloud_id + "_camera_params.txt");
+    // }
+    // catch(const std::exception& e)
+    // {
+    // }
+    // myviewer.addOrigin();
+
+    // PointCloud::Ptr gt_truss (new PointCloud);
+    // PointCloud::Ptr gt_ground (new PointCloud);
+
+    // gt_truss = arvc::extract_indices(this->cloud_in, this->gt_truss_idx);
+    // gt_ground = arvc::extract_indices(this->cloud_in, this->gt_ground_idx);
+
+    // myviewer.addCloud(gt_truss,  arvc::color(50,200,50));
+    // myviewer.addCloud(gt_ground, arvc::color(100,100,100));
+
+    // myviewer.show();
+
+    // return 0; */
+    
     this->coarse_segmentation();
     this->fine_segmentation();
     this->update_segmentation();
