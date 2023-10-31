@@ -263,7 +263,7 @@ public:
 
       try
       {
-        my_vis.loadCameraParameters("/home/arvc/workSpaces/code_ws/build/" + cloud_id + "_camera_params.txt");
+        my_vis.loadCameraParameters("camera_params.txt");
       }
       catch(const std::exception& e)
       {
