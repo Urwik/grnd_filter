@@ -409,7 +409,6 @@ public:
   vector<int>
   validate_clusters_hybrid()
   {
-    // cout << GREEN <<"Checking regrow clusters..." << RESET << endl;
     vector<int> valid_clusters;
     valid_clusters.clear();
     PointCloud::Ptr current_cluster_cloud (new PointCloud);
@@ -505,15 +504,6 @@ int main(int argc, char **argv)
       rg.mode = "module";
       rg.compute();
 
-      // GET IMPORTANT CLOUDS
-/*       {
-        by_module_f1.push_back(rg.metricas.f1_score);
-
-        rg.mode = "hybrid";
-        rg.compute();
-        by_hybrid_f1.push_back(rg.metricas.f1_score);
-      } */
-
       normals_time += rg.normals_time;
       metrics_time += rg.metrics_time;
 
@@ -564,19 +554,6 @@ int main(int argc, char **argv)
       metricas.fn_vector.push_back(rg.cm.FN);
     }
   }
-
-
-// REMOVE
-
-/*   float distance;
-  for (size_t i = 0; i < by_module_f1.size(); i++)
-  {
-    distance = std::abs(by_module_f1[i] - by_hybrid_f1[i]);
-    
-    if (distance > 0.01)
-      cout << "CLOUD WITH DIFFERENCE: " << path_vector[i].filename() << endl;
-  } */
-
 
   // PLOT METRICS
   
