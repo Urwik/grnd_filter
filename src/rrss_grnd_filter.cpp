@@ -67,6 +67,7 @@ public:
   float ransac_threshold;
 
   string mode;
+  string cloud_id;
 
 
 
@@ -97,6 +98,8 @@ public:
     this->ratio_threshold = 0.3f;
     this->module_threshold = 1000.0f;
     this->ransac_threshold = 0.5f;
+    this->mode = "hybrid";
+    this->cloud_id = this->path.stem().string();
   }
 
 
@@ -260,7 +263,7 @@ public:
 
       try
       {
-        my_vis.loadCameraParameters("camera_params.txt");
+        my_vis.loadCameraParameters("/home/arvc/workSpaces/code_ws/build/" + cloud_id + "_camera_params.txt");
       }
       catch(const std::exception& e)
       {
@@ -268,7 +271,7 @@ public:
       }
       
 
-      pcl::visualization::PointCloudColorHandlerCustom<PointT> truss_color (truss_cloud, 0,255,0);
+      pcl::visualization::PointCloudColorHandlerCustom<PointT> truss_color (truss_cloud, 50,200,50);
       pcl::visualization::PointCloudColorHandlerCustom<PointT> ground_color (ground_cloud, 100,100,100);
       pcl::visualization::PointCloudColorHandlerCustom<PointT> error_color (error_cloud, 255,0,0);
 
@@ -456,7 +459,9 @@ int main(int argc, char **argv)
   std::cout << YELLOW << "Running your code..." << RESET << std::endl;
   auto start = std::chrono::high_resolution_clock::now();
 
-  cons.enable_debug = false;
+  cons.enable = true;
+  cons.enable_error = true;
+  cons.enable_debug = true;
 
   // CONFIGURATION PARAMS
   bool en_visual = true;
