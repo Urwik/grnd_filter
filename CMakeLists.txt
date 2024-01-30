@@ -15,3 +15,6 @@ add_definitions(${PCL_DEFINITIONS} ${Eigen3_DEFINITIONS})
 add_executable(rrss_grnd_filter src/rrss_grnd_filter.cpp)
 target_link_libraries(rrss_grnd_filter ${PCL_LIBRARIES})
 
+include_directories(arvc_utils/include)
+add_executable(visualize_clouds src/visualize_clouds.cpp)
+target_link_libraries(visualize_clouds ${PCL_LIBRARIES})

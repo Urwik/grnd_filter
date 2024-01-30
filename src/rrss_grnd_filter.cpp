@@ -1,3 +1,4 @@
+
 // C++
 // PREVIOUS VERSION TO THE CHANGE OF THE ARVC UTILS LIBRARY
 #include <iostream>
@@ -5,10 +6,13 @@
 #include <filesystem>
 #include <chrono>
 
-#include "arvc_utils_v2.hpp"
 #include "tqdm.hpp"
+#include "arvc_utils/arvc_utils.hpp"
+#include "arvc_utils/arvc_metrics.hpp"
+#include "arvc_utils/arvc_console.hpp"
+#include "arvc_utils/arvc_viewer.hpp"
 
-#include "arvc_metrics.hpp"
+// #include "arvc_utils_v2. hpp"
 // #include "arvc_console.hpp"
 // #include "arvc_viewer.hpp"
 
@@ -54,7 +58,8 @@ public:
   pcl::IndicesPtr fn_idx;
   pcl::IndicesPtr tn_idx;
 
-  metrics metricas;
+  arvc::Metrics metricas;
+  // metrics metricas;
   conf_matrix cm;
 
   int normals_time;
@@ -262,9 +267,11 @@ public:
       pcl::visualization::PCLVisualizer my_vis;
       my_vis.setBackgroundColor(1,1,1);
 
+      fs::path camera_params_path = "/home/arvc/workSpaces/rrss_grnd_filter/examples/minkunet_predictions/" + this->cloud_id + "_camera_params.txt";
+
       try
       {
-        my_vis.loadCameraParameters("camera_params.txt");
+        my_vis.loadCameraParameters(camera_params_path.string());
         // my_vis.loadCameraParameters("/home/arvc/workSpaces/code_ws/build/" + this->cloud_id + "_camera_params.txt");
 
       }
@@ -274,9 +281,9 @@ public:
       }
       
 
-      pcl::visualization::PointCloudColorHandlerCustom<PointT> truss_color (truss_cloud, 50,200,50);
+      pcl::visualization::PointCloudColorHandlerCustom<PointT> truss_color (truss_cloud, 50,190,50);
       pcl::visualization::PointCloudColorHandlerCustom<PointT> ground_color (ground_cloud, 100,100,100);
-      pcl::visualization::PointCloudColorHandlerCustom<PointT> error_color (error_cloud, 255,0,0);
+      pcl::visualization::PointCloudColorHandlerCustom<PointT> error_color (error_cloud, 200,10,10);
 
       my_vis.addPointCloud(truss_cloud, truss_color, "truss_cloud");
       my_vis.addPointCloud(ground_cloud, ground_color, "wrong_cloud");
@@ -289,7 +296,7 @@ public:
 
       while (!my_vis.wasStopped())
       {
-        my_vis.saveCameraParameters("camera_params.txt");
+        my_vis.saveCameraParameters(camera_params_path.string());
         my_vis.spinOnce(100);
       }
   }
@@ -300,7 +307,9 @@ public:
     auto start = std::chrono::high_resolution_clock::now();
     
     this->cm = arvc::compute_conf_matrix(this->gt_truss_idx, this->gt_ground_idx, this->truss_idx, this->ground_idx);
-    this->metricas = arvc::compute_metrics(cm);
+
+    this->metricas.computeMetricsFromConfusionMatrix(this->cm.TP, this->cm.FP, this->cm.FN, this->cm.TN);
+    // this->metricas = arvc::compute_metrics(cm);
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
@@ -467,7 +476,7 @@ public:
     // return 0; */
     
     this->coarse_segmentation();
-    this->fine_segmentation();
+    // this->fine_segmentation();
     this->update_segmentation();
     this->density_filter();
 
@@ -509,7 +518,7 @@ int main(int argc, char **argv)
   
 
   // VARIABLES UTILITIES
-  arvc::metrics metricas;
+  arvc::Metrics metricas;
   std::vector<fs::path> path_vector;
   
   int count = 5;
@@ -519,7 +528,7 @@ int main(int argc, char **argv)
 
   // COMPUTE THE ALGORITHM FOR EVERY CLOUD IN THE CURRENT FOLDER
 
-  if(argc < 2)
+  if(argc == 1)
   {
     fs::path current_dir = fs::current_path();
     for(const auto &entry : fs::directory_iterator(current_dir))
@@ -553,14 +562,14 @@ int main(int argc, char **argv)
 
       if(en_metric)
       {
-        metricas.accuracy.push_back(rg.metricas.accuracy);
-        metricas.precision.push_back(rg.metricas.precision);
-        metricas.recall.push_back(rg.metricas.recall);
-        metricas.f1_score.push_back(rg.metricas.f1_score);
-        metricas.tp_vector.push_back(rg.cm.TP);
-        metricas.tn_vector.push_back(rg.cm.TN);
-        metricas.fp_vector.push_back(rg.cm.FP);
-        metricas.fn_vector.push_back(rg.cm.FN);
+        metricas.accuracy.push_back(rg.metricas.getMean<float>(rg.metricas.accuracy));
+        metricas.precision.push_back(rg.metricas.getMean<float>(rg.metricas.precision));
+        metricas.recall.push_back(rg.metricas.getMean<float>(rg.metricas.recall));   
+        metricas.f1_score.push_back(rg.metricas.getMean<float>(rg.metricas.f1_score)); 
+        metricas.tp.push_back(rg.metricas.getMean<int>(rg.metricas.tp));
+        metricas.tn.push_back(rg.metricas.getMean<int>(rg.metricas.tn));
+        metricas.fp.push_back(rg.metricas.getMean<int>(rg.metricas.fp));
+        metricas.fn.push_back(rg.metricas.getMean<int>(rg.metricas.fn));
       }
     } 
   }
@@ -569,7 +578,7 @@ int main(int argc, char **argv)
 
   // COMPUTE THE ALGORITHM ONLY ONE CLOUD PASSED AS ARGUMENT IN CURRENT FOLDER
 
-  else {
+  else if(argc >= 2){
 
     fs::path entry = argv[1];
 
@@ -580,7 +589,13 @@ int main(int argc, char **argv)
     rg.ratio_threshold = ratio_threshold;
     rg.module_threshold = module_threshold;
     rg.ransac_threshold = rsac_thrsh;
-    rg.mode = argv[2];
+    if(argc == 3)
+      rg.mode = argv[2];
+    else{
+      std::cout << "\tNo mode selected, using default mode: hybrid" << std::endl;
+      std::cout << "\tUsage: ./rrss_grnd_filter <path_to_cloud> <mode>{ratio, module, hybrid}" << std::endl;
+      rg.mode = "hybrid";
+    }
 
     rg.compute();
 
@@ -588,37 +603,30 @@ int main(int argc, char **argv)
     metrics_time += rg.metrics_time;
 
     if(en_metric){
-      metricas.accuracy.push_back(rg.metricas.accuracy);
-      metricas.precision.push_back(rg.metricas.precision);
-      metricas.recall.push_back(rg.metricas.recall);
-      metricas.f1_score.push_back(rg.metricas.f1_score);
-      metricas.tp_vector.push_back(rg.cm.TP);
-      metricas.tn_vector.push_back(rg.cm.TN);
-      metricas.fp_vector.push_back(rg.cm.FP);
-      metricas.fn_vector.push_back(rg.cm.FN);
+        metricas.accuracy.push_back(rg.metricas.getMean<float>(rg.metricas.accuracy));
+        metricas.precision.push_back(rg.metricas.getMean<float>(rg.metricas.precision));
+        metricas.recall.push_back(rg.metricas.getMean<float>(rg.metricas.recall));   
+        metricas.f1_score.push_back(rg.metricas.getMean<float>(rg.metricas.f1_score)); 
+        metricas.tp.push_back(rg.metricas.getMean<int>(rg.metricas.tp));
+        metricas.tn.push_back(rg.metricas.getMean<int>(rg.metricas.tn));
+        metricas.fp.push_back(rg.metricas.getMean<int>(rg.metricas.fp));
+        metricas.fn.push_back(rg.metricas.getMean<int>(rg.metricas.fn));
     }
   }
 
-
-// REMOVE
-
-/*   float distance;
-  for (size_t i = 0; i < by_module_f1.size(); i++)
-  {
-    distance = std::abs(by_module_f1[i] - by_hybrid_f1[i]);
-    
-    if (distance > 0.01)
-      cout << "CLOUD WITH DIFFERENCE: " << path_vector[i].filename() << endl;
-  } */
-
-
+  else{
+    cout << "Wrong usage" << endl;
+    cout << "Usage for multiple clouds: <dataset_directory> ./rrss_grnd_filter" << endl;
+    cout << "Usage for isolated cloud: ./rrss_grnd_filter <path_to_cloud> <mode>{ratio, module, hybrid}" << endl;
+    return 0;
+  }
   // PLOT METRICS
   
-  if(en_metric) metricas.show(); 
+  if(en_metric) 
+    metricas.plotMetrics(); 
     
-  
-  // PRINT COMPUTATION TIME
 
+  // PRINT COMPUTATION TIME
   auto stop = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
   std::cout << YELLOW << "Code end!!" << RESET << std::endl;
