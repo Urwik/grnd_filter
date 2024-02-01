@@ -1,0 +1,3 @@
+[submodule "arvc_utils"]
+	path = arvc_utils
+	url = https://github.com/Urwik/arvc_utils.git
