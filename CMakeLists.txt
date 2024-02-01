@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 # find_package(PCL 1.3 REQUIRED COMPONENTS common io filters visualization)
 find_package(PCL 1.3 REQUIRED)
+message(STATUS "PCL version: ${PCL_VERSION}")
+
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 
 include_directories(include  ${PCL_INCLUDE_DIRS} ${Eigen3_INCLUDE_DIRS})
@@ -16,5 +18,3 @@ add_executable(rrss_grnd_filter src/rrss_grnd_filter.cpp)
 target_link_libraries(rrss_grnd_filter ${PCL_LIBRARIES})
 
 include_directories(arvc_utils/include)
-add_executable(visualize_clouds src/visualize_clouds.cpp)
-target_link_libraries(visualize_clouds ${PCL_LIBRARIES})
