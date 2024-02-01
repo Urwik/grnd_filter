@@ -123,6 +123,7 @@ public:
   void
   getConfMatrixIndexes()
   {
+    // For the index points classified as truss, check if this point is in the ground truth truss. If it is, it is a true positive, otherwise it is a false positive.
     for (size_t i = 0; i < this->truss_idx->size(); i++)
     {
       if(std::find(this->gt_truss_idx->begin(), this->gt_truss_idx->end(), this->truss_idx->at(i)) != this->gt_truss_idx->end())
@@ -131,6 +132,7 @@ public:
         this->fp_idx->push_back(this->truss_idx->at(i));
     }
 
+    // For the index points classified as ground, check if this point is in the ground truth ground. If it is, it is a true negative, otherwise it is a false negative.
     for (size_t i = 0; i < this->ground_idx->size(); i++)
     {
       if(std::find(this->gt_ground_idx->begin(), this->gt_ground_idx->end(), this->ground_idx->at(i)) != this->gt_ground_idx->end())
@@ -147,7 +149,7 @@ public:
     cons.debug("Reading cloud");
     PointCloudLN::Ptr cloud_in_labelled (new PointCloudLN);
     
-    cloud_in_labelled = arvc::readCloudWithLabelNormal(this->path);
+    cloud_in_labelled = arvc::readPointCloud<PointLN>(this->path);
 
     this->get_ground_truth_indices(cloud_in_labelled);
     this->cloud_in = arvc::parseToXYZ(cloud_in_labelled);
@@ -159,7 +161,8 @@ public:
     gt_indices ground_truth_indices;
     ground_truth_indices.ground.reset(new pcl::Indices); 
     ground_truth_indices.truss.reset(new pcl::Indices); 
-    ground_truth_indices = arvc::getGroundTruthIndices(_cloud);
+    // ground_truth_indices = arvc::getGroundTruthIndices(_cloud);
+    ground_truth_indices = arvc::getGroundTruthIndicesV2(_cloud);
     *this->gt_ground_idx = *ground_truth_indices.ground;
     *this->gt_truss_idx = *ground_truth_indices.truss;
   }
@@ -449,32 +452,23 @@ public:
   int compute()
   {
     this->read_cloud();
-    
-/*     // PLOT GT CLOUD
-    // arvc::viewer myviewer("Viewer");
-    // myviewer.background_color = {1,1,1};
-    // try
-    // {
-    //   myviewer.view->loadCameraParameters("/home/arvc/workSpaces/code_ws/build/" + this->cloud_id + "_camera_params.txt");
-    // }
-    // catch(const std::exception& e)
-    // {
-    // }
-    // myviewer.addOrigin();
+    this->coarse_segmentation();
+    this->fine_segmentation();
+    this->update_segmentation();
+    this->density_filter();
 
-    // PointCloud::Ptr gt_truss (new PointCloud);
-    // PointCloud::Ptr gt_ground (new PointCloud);
+    if (this->visualize)
+      this->view_final_segmentation();
 
-    // gt_truss = arvc::extract_indices(this->cloud_in, this->gt_truss_idx);
-    // gt_ground = arvc::extract_indices(this->cloud_in, this->gt_ground_idx);
+    if(this->enable_metrics)
+      this->compute_metrics();
 
-    // myviewer.addCloud(gt_truss,  arvc::color(50,200,50));
-    // myviewer.addCloud(gt_ground, arvc::color(100,100,100));
+    return 0;
+  }
 
-    // myviewer.show();
-
-    // return 0; */
-    
+    int computeWOfine()
+  {
+    this->read_cloud();
     this->coarse_segmentation();
     // this->fine_segmentation();
     this->update_segmentation();
@@ -497,13 +491,13 @@ int main(int argc, char **argv)
   std::cout << YELLOW << "Running your code..." << RESET << std::endl;
   auto start = std::chrono::high_resolution_clock::now();
 
-  cons.enable = true;
+  cons.enable = false;
   cons.enable_error = true;
   cons.enable_debug = true;
 
   // CONFIGURATION PARAMS
-  bool en_visual = true;
-  bool en_metric = false;
+  bool en_visual = false;
+  bool en_metric = true;
 
   float node_lngth = 2.0f;
   float node_width = 0.2f;
@@ -537,7 +531,9 @@ int main(int argc, char **argv)
         path_vector.push_back(entry.path());
     }
 
-    for(const fs::path &entry : tq::tqdm(path_vector))
+    // for(const fs::path &entry : tq::tqdm(path_vector))
+    for(const fs::path &entry : path_vector)
+
     {
       remove_ground rg(entry);
       rg.visualize = en_visual;
@@ -545,31 +541,32 @@ int main(int argc, char **argv)
       rg.ratio_threshold = ratio_threshold;
       rg.module_threshold = module_threshold;
 
-      rg.mode = "module";
+      rg.mode = "hybrid"; // DEFAULT MODE
       rg.compute();
 
       // GET IMPORTANT CLOUDS
-/*       {
-        by_module_f1.push_back(rg.metricas.f1_score);
+      {
+        float recall_hybrid = rg.metricas.values.recall;
+        rg.computeWOfine();
+        float recall_WOfine = rg.metricas.values.recall;
 
-        rg.mode = "hybrid";
-        rg.compute();
-        by_hybrid_f1.push_back(rg.metricas.f1_score);
-      } */
+        if (recall_hybrid > recall_WOfine)
+          cout << GREEN << rg.path.stem() << RESET << endl;
+      }
 
       normals_time += rg.normals_time;
       metrics_time += rg.metrics_time;
 
       if(en_metric)
       {
-        metricas.accuracy.push_back(rg.metricas.getMean<float>(rg.metricas.accuracy));
-        metricas.precision.push_back(rg.metricas.getMean<float>(rg.metricas.precision));
-        metricas.recall.push_back(rg.metricas.getMean<float>(rg.metricas.recall));   
-        metricas.f1_score.push_back(rg.metricas.getMean<float>(rg.metricas.f1_score)); 
-        metricas.tp.push_back(rg.metricas.getMean<int>(rg.metricas.tp));
-        metricas.tn.push_back(rg.metricas.getMean<int>(rg.metricas.tn));
-        metricas.fp.push_back(rg.metricas.getMean<int>(rg.metricas.fp));
-        metricas.fn.push_back(rg.metricas.getMean<int>(rg.metricas.fn));
+        metricas.accuracy.push_back(rg.metricas.values.accuracy);
+        metricas.precision.push_back(rg.metricas.values.precision);
+        metricas.recall.push_back(rg.metricas.values.recall);   
+        metricas.f1_score.push_back(rg.metricas.values.f1_score);
+        metricas.tp.push_back(rg.metricas.values.tp);
+        metricas.tn.push_back(rg.metricas.values.tn);
+        metricas.fp.push_back(rg.metricas.values.fp);
+        metricas.fn.push_back(rg.metricas.values.fn);
       }
     } 
   }
@@ -603,14 +600,14 @@ int main(int argc, char **argv)
     metrics_time += rg.metrics_time;
 
     if(en_metric){
-        metricas.accuracy.push_back(rg.metricas.getMean<float>(rg.metricas.accuracy));
-        metricas.precision.push_back(rg.metricas.getMean<float>(rg.metricas.precision));
-        metricas.recall.push_back(rg.metricas.getMean<float>(rg.metricas.recall));   
-        metricas.f1_score.push_back(rg.metricas.getMean<float>(rg.metricas.f1_score)); 
-        metricas.tp.push_back(rg.metricas.getMean<int>(rg.metricas.tp));
-        metricas.tn.push_back(rg.metricas.getMean<int>(rg.metricas.tn));
-        metricas.fp.push_back(rg.metricas.getMean<int>(rg.metricas.fp));
-        metricas.fn.push_back(rg.metricas.getMean<int>(rg.metricas.fn));
+        metricas.accuracy.push_back(rg.metricas.values.accuracy);
+        metricas.precision.push_back(rg.metricas.values.precision);
+        metricas.recall.push_back(rg.metricas.values.recall);   
+        metricas.f1_score.push_back(rg.metricas.values.f1_score);
+        metricas.tp.push_back(rg.metricas.values.tp);
+        metricas.tn.push_back(rg.metricas.values.tn);
+        metricas.fp.push_back(rg.metricas.values.fp);
+        metricas.fn.push_back(rg.metricas.values.fn);
     }
   }
 
