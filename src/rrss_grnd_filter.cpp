@@ -27,10 +27,6 @@
 namespace fs = std::filesystem;
 using namespace std;
 
-arvc::console cons;
-arvc::viewer view("GLOBAL VIEWER");
-
-
 class remove_ground
 {
 private:
@@ -67,6 +63,7 @@ public:
 
   bool visualize;
   bool enable_metrics;
+  bool debug_msgs;
 
   float module_threshold;
   float ratio_threshold;
@@ -74,7 +71,7 @@ public:
 
   string mode;
   string cloud_id;
-
+  arvc::console cons;
 
 
   remove_ground(fs::path _path)
@@ -106,6 +103,12 @@ public:
     this->ransac_threshold = 0.5f;
     this->mode = "hybrid";
     this->cloud_id = this->path.stem().string();
+
+    this->debug_msgs = true;
+    this->cons.enable = this->debug_msgs;
+    this->cons.enable_error = this->debug_msgs;
+    this->cons.enable_debug = this->debug_msgs;
+
   }
 
 
@@ -146,13 +149,15 @@ public:
 
 
   void read_cloud(){
-    cons.debug("Reading cloud");
+    this->cons.debug("Reading cloud...", "YELLOW");
     PointCloudLN::Ptr cloud_in_labelled (new PointCloudLN);
     
     cloud_in_labelled = arvc::readPointCloud<PointLN>(this->path);
 
     this->get_ground_truth_indices(cloud_in_labelled);
     this->cloud_in = arvc::parseToXYZ(cloud_in_labelled);
+
+    this->cons.debug("Cloud in size: " + to_string(this->cloud_in->size()), "YELLOW");
   }
 
 
@@ -170,7 +175,7 @@ public:
 
 
   void coarse_segmentation(){
-    cons.debug("Coarse segmentation");
+    this->cons.debug("Coarse segmentation");
     PointCloud::Ptr tmp_cloud (new PointCloud);
     pcl::ModelCoefficientsPtr tmp_plane_coefss (new pcl::ModelCoefficients);
 
@@ -184,7 +189,7 @@ public:
 
 
   void fine_segmentation(){
-    cons.debug("Fine segmentation");
+    this->cons.debug("Fine segmentation");
 
     std::pair<vector<pcl::PointIndices>, int> regrow_output;
     
@@ -207,7 +212,7 @@ public:
 
 
   void validate_clusters(){
-    cons.debug("Validating clusters");
+    this->cons.debug("Validating clusters");
 
     map<string, int> mode_dict;
     mode_dict["ratio"] = 0;
@@ -237,7 +242,7 @@ public:
 
 
   void density_filter(){
-    cons.debug("Density filter");
+    this->cons.debug("Density filter");
 
     this->truss_idx = arvc::radius_outlier_removal(this->cloud_in, this->truss_idx, 0.1f, 5, false);
     this->ground_idx = arvc::inverseIndices(this->cloud_in, this->truss_idx);
@@ -466,7 +471,8 @@ public:
     return 0;
   }
 
-    int computeWOfine()
+
+  int computeWOfine()
   {
     this->read_cloud();
     this->coarse_segmentation();
@@ -482,6 +488,25 @@ public:
 
     return 0;
   }
+
+
+  int computeWoCoarse()
+  {
+    this->read_cloud();
+    // this->coarse_segmentation();
+    this->fine_segmentation();
+    this->update_segmentation();
+    this->density_filter();
+
+    if (this->visualize)
+      this->view_final_segmentation();
+
+    if(this->enable_metrics)
+      this->compute_metrics();
+
+    return 0;
+  
+  }
 };
 
 
@@ -491,13 +516,11 @@ int main(int argc, char **argv)
   std::cout << YELLOW << "Running your code..." << RESET << std::endl;
   auto start = std::chrono::high_resolution_clock::now();
 
-  cons.enable = false;
-  cons.enable_error = true;
-  cons.enable_debug = true;
+  bool enable_debug = true;
 
   // CONFIGURATION PARAMS
-  bool en_visual = false;
-  bool en_metric = true;
+  bool en_visual = true;
+  bool en_metric = false;
 
   float node_lngth = 2.0f;
   float node_width = 0.2f;
@@ -505,8 +528,6 @@ int main(int argc, char **argv)
 
   float ratio_threshold = node_width / rsac_thrsh;    // original
   float module_threshold = rsac_thrsh;                // original
-  // float ratio_threshold = node_width / node_lngth;   // wo coarse 
-  // float module_threshold = node_lngth;               // wo coarse
   
   int normals_time = 0, metrics_time = 0;
   
@@ -521,7 +542,6 @@ int main(int argc, char **argv)
   vector<float> by_hybrid_f1;
 
   // COMPUTE THE ALGORITHM FOR EVERY CLOUD IN THE CURRENT FOLDER
-
   if(argc == 1)
   {
     fs::path current_dir = fs::current_path();
@@ -538,21 +558,24 @@ int main(int argc, char **argv)
       remove_ground rg(entry);
       rg.visualize = en_visual;
       rg.enable_metrics = en_metric;
-      rg.ratio_threshold = ratio_threshold;
-      rg.module_threshold = module_threshold;
+      rg.ratio_threshold = node_width / rsac_thrsh;    // original
+      rg.module_threshold = rsac_thrsh;                // original
+      rg.debug_msgs = enable_debug;
 
       rg.mode = "hybrid"; // DEFAULT MODE
       rg.compute();
 
-      // GET IMPORTANT CLOUDS
-      {
-        float recall_hybrid = rg.metricas.values.recall;
-        rg.computeWOfine();
-        float recall_WOfine = rg.metricas.values.recall;
+      // // GET IMPORTANT CLOUDS
+      // {
+      //   float recall_hybrid = rg.metricas.values.recall;
+      //   rg.computeWOfine();
+      //   float recall_WOfine = rg.metricas.values.recall;
 
-        if (recall_hybrid > recall_WOfine)
-          cout << GREEN << rg.path.stem() << RESET << endl;
-      }
+      //   if (recall_hybrid > recall_WOfine){
+      //     cout << GREEN << rg.path.stem() << RESET << endl;
+
+      //   }
+      // }
 
       normals_time += rg.normals_time;
       metrics_time += rg.metrics_time;
@@ -572,29 +595,52 @@ int main(int argc, char **argv)
   }
 
   
-
   // COMPUTE THE ALGORITHM ONLY ONE CLOUD PASSED AS ARGUMENT IN CURRENT FOLDER
-
-  else if(argc >= 2){
+  else if(argc == 3){
 
     fs::path entry = argv[1];
-
     remove_ground rg(entry);
+
+    const string MODE = argv[2];
   
     rg.visualize = en_visual;
     rg.enable_metrics = en_metric;
-    rg.ratio_threshold = ratio_threshold;
-    rg.module_threshold = module_threshold;
+    // rg.ratio_threshold = ratio_threshold;
+    // rg.module_threshold = module_threshold;
     rg.ransac_threshold = rsac_thrsh;
-    if(argc == 3)
-      rg.mode = argv[2];
-    else{
-      std::cout << "\tNo mode selected, using default mode: hybrid" << std::endl;
-      std::cout << "\tUsage: ./rrss_grnd_filter <path_to_cloud> <mode>{ratio, module, hybrid}" << std::endl;
+    rg.debug_msgs = enable_debug;
+    
+    if (MODE == "wofine")
+    {
+      cout << "Entra en modo wofine" << endl;
+      rg.ratio_threshold = node_width / rsac_thrsh;    // original
+      rg.module_threshold = rsac_thrsh;     
+      rg.computeWOfine();
+    }
+  
+    else if (MODE == "wocoarse") // DEFAULT METHOD HYBRID
+    {
+      cout << "Entra en modo wocoarse" << endl;
+      // UPATE THRESHOLDS FOR COMLETE FINE SEGMENTATION
+      rg.ratio_threshold = node_width / node_lngth;   // wo coarse 
+      rg.module_threshold = node_lngth;               // wo coarse
       rg.mode = "hybrid";
+      rg.computeWoCoarse();
+    }
+  
+    else if (MODE == "ratio" || MODE == "module" || MODE == "hybrid")
+    {
+      cout << "Entra en modo normal" << endl;
+      rg.ratio_threshold = node_width / rsac_thrsh;    // original
+      rg.module_threshold = rsac_thrsh;                // original
+      rg.mode = MODE;
+      rg.compute();
     }
 
-    rg.compute();
+    else{
+      cout << "NO ENTRA EN NINGUN MODODEFAULT" << endl;
+      return 1;
+    }
 
     normals_time += rg.normals_time;
     metrics_time += rg.metrics_time;
@@ -609,14 +655,16 @@ int main(int argc, char **argv)
         metricas.fp.push_back(rg.metricas.values.fp);
         metricas.fn.push_back(rg.metricas.values.fn);
     }
+
   }
 
   else{
-    cout << "Wrong usage" << endl;
-    cout << "Usage for multiple clouds: <dataset_directory> ./rrss_grnd_filter" << endl;
-    cout << "Usage for isolated cloud: ./rrss_grnd_filter <path_to_cloud> <mode>{ratio, module, hybrid}" << endl;
-    return 0;
+    std::cout << "\tNo mode selected." << std::endl;
+    std::cout << "\tUsage: ./rrss_grnd_filter <path_to_cloud> <mode>{ratio, module, hybrid, wofine, wocoarse}" << std::endl;
+    return 1;
   }
+
+
   // PLOT METRICS
   
   if(en_metric) 
